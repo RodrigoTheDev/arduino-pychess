@@ -13,7 +13,9 @@ int move_limit_y(long int num, bool negative); // divide o movimento em pequenas
 int move_limit_x(long int num, bool negative); // divide o movimento em pequenas vezes para mover o eixo Y
 int module(int num); // pega o módulo do numero
 // funcoes movimento
-void moveX(long int origem, long int destino); // move relativo ao global, calculando a diferença
+void moveX(long int origem, long int destino); // move X relativo ao global, calculando a diferença
+void moveY(long int origem, long int destino); // move Y relativo ao global, calculando a diferença
+void moveZero(); // move o robô até o ponto zero estabelecido no reset
 void pegar(); // desce, pega e sobe
 void soltar(); // solta
 void descer(); // desce e solta
@@ -51,11 +53,6 @@ const int steps_rev =   8; // passos por revolução (200 uma volta completa)
 int dirx=0,diry=0,dirz= 0; // Direção de cada eixo (para controlar no loop)
 long int tracker_x = 0; // rastreador de movimento do eixo X
 long int tracker_y = 0;
-
-// Variáveis de rastreio de passos
-int track_x = 0;
-int track_y = 0;
-int track_z = 0;
 
 // Instanciando motores e servo
 Servo garra;
@@ -97,16 +94,59 @@ void loop() {
     // Remove qualquer caractere de nova linha ou retorno de carro
     recebido.trim();
 
-    long int stepnum = recebido.toInt(); // convertendo para inteiro (CONTROLE DE MOTORES, APAGAR DEPOIS DE MAPEADO)
+    // Calculando coordenadas
+    char origem[2]  = {recebido[0], recebido[1]}; // isolando origem
+    char destino[2] = {recebido[2], recebido[3]}; // isolando destino
 
-    Serial.println(stepnum);
+    // pegando índices de origem
+    int index_origem[2] = {findIndex_str(x_pos, SIZE, String(origem[0])),
+                           findIndex_int(y_pos, SIZE, String(origem[1]).toInt())};
+    // pegando índices de destino
+    int index_destino[2] = {findIndex_str(x_pos, SIZE, String(destino[0])),
+                           findIndex_int(y_pos, SIZE, String(destino[1]).toInt())};
 
-    if (stepnum > 0) {
-        move_limit_x(stepnum,false);
-    }
-    else if (stepnum < 0) {
-      move_limit_x(module(stepnum),true);
-    }
+   // removendo uma peça, caso ela esteja no destino
+   if(recebido.equals("s")) {
+    // vai até a localização da peça
+    moveX(tracker_x, x_map[index_destino[0]]);
+    moveY(tracker_y, y_map[index_destino[1]]);
+    
+    pegar(); // pega
+    moveZero(); // move até o ponto zero
+    
+    soltar(); // solta a zoio
+  }
+  
+    Serial.println((String)"origem X: "+x_map[index_origem[0]]);
+    Serial.println((String)"origem Y: "+y_map[index_origem[1]]);
+
+    // movendo até a origem e pegando peça
+    moveX(tracker_x, x_map[index_origem[0]]);
+    moveY(tracker_y, y_map[index_origem[1]]);
+    pegar();
+    
+    Serial.println((String)"destino X: "+x_map[index_destino[0]]);
+    Serial.println((String)"destino Y: "+y_map[index_destino[1]]);
+
+    // movendo até o destino e deixando a peça
+    moveX(tracker_x, x_map[index_destino[0]]);
+    moveY(tracker_y, y_map[index_destino[1]]);
+    descer();
+    soltar();
+    subir();
+
+    // DEBUG
+
+//    long int stepnum = recebido.toInt(); // convertendo para inteiro (CONTROLE DE MOTORES, APAGAR DEPOIS DE MAPEADO)
+
+//    Serial.println(stepnum);
+
+//    if (stepnum > 0) {
+//        move_limit_x(stepnum,false);
+//    }
+//    else if (stepnum < 0) {
+//      move_limit_x(module(stepnum),true);
+//    }
 
 //    motor_z.step(stepnum);
   }
@@ -119,6 +159,18 @@ void moveX(long int origem, long int destino) {
   bool negative = (result < 0);
   
   move_limit_x(module(result), negative); 
+}
+void moveY(long int origem, long int destino) {
+  
+  long int result =  destino - origem;
+  bool negative = (result < 0);
+  
+  move_limit_y(module(result), negative); 
+}
+
+void moveZero() {
+  moveX(tracker_x,0);
+  moveY(tracker_y,0);
 }
 
 void pegar() {
