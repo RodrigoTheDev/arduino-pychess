@@ -5,15 +5,18 @@
 // Valor máximo permitido pelos motores de passo (VERIFICAR AGORA COM LONG, PODE NÃO SER MAIS NECESSÁRIO)
 #define MAX 26864
 #define SIZE 8
+#define APERTURE 84
 
 // funções
 int findIndex_int(int array[], int size, int target); // Encontra o índice de um array de inteiros
 int findIndex_str(String array[], int size, String target); // Encontra o índice de um array de strings
 int move_limit_y(long int num, bool negative); // divide o movimento em pequenas vezes para mover o eixo Y
 int move_limit_x(long int num, bool negative); // divide o movimento em pequenas vezes para mover o eixo Y
-int module(int num); // pega o módulo do numero
+long int module(long int num); // pega o módulo do numero
 // funcoes movimento
-void moveX(long int origem, long int destino); // move relativo ao global, calculando a diferença
+void moveX(long int origem, long int destino); // move X relativo ao global, calculando a diferença
+void moveY(long int origem, long int destino); // move Y relativo ao global, calculando a diferença
+void moveZero(); // move o robô até o ponto zero estabelecido no reset
 void pegar(); // desce, pega e sobe
 void soltar(); // solta
 void descer(); // desce e solta
@@ -22,7 +25,7 @@ void subir(); // sobe
 
 // Lista de coordenadas
 String x_pos[8] = {"a","b","c","d","e","f","g","h"};
-int y_pos[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+int y_pos[8] = {8, 7, 6, 5, 4, 3, 2, 1};
 
 // Mapa dos valores
 long int x_map[8] = {
@@ -35,6 +38,7 @@ long int x_map[8] = {
   -81200,
   -92000
 };
+
 long int y_map[8] = {
   0,
   10500,
@@ -52,11 +56,6 @@ int dirx=0,diry=0,dirz= 0; // Direção de cada eixo (para controlar no loop)
 long int tracker_x = 0; // rastreador de movimento do eixo X
 long int tracker_y = 0;
 
-// Variáveis de rastreio de passos
-int track_x = 0;
-int track_y = 0;
-int track_z = 0;
-
 // Instanciando motores e servo
 Servo garra;
 AF_Stepper motor_y(steps_rev,2); // Motor que movimenta a estrutura no eixo X (passos, port)
@@ -70,43 +69,88 @@ void setup() {
 
   motor_x.setSpeed(6000);
   motor_y.setSpeed(6000);
-  motor_z.setSpeed(5000);  
+  motor_z.setSpeed(5000);
   
-// DEBUG
-  move_limit_x(27800, true); // move n passos em x  
-  move_limit_y(10500, false); // move n passos em y
-  pegar();
-  move_limit_y(10500, false);
-  descer();
-  subir();
-  move_limit_y(21000, true);
-  move_limit_x(27800, false);
-//  Serial.println(tracker_x);
-//  delay(5000);
-//  move_limit_x(27800, false); // move n passos em x
+  garra.write(110); // fecha a garra
+  delay(500);
 
-
+  move_limit_x(38800,false);
+  move_limit_y(42000,true);
 }
 
 void loop() {
   // Eixo Y
   if (Serial.available() > 0) {
+    garra.write(110); // fecha a garra
+    delay(500);
     // Lê a string recebida da porta serial
     String recebido = Serial.readString();
 
     // Remove qualquer caractere de nova linha ou retorno de carro
     recebido.trim();
 
-    long int stepnum = recebido.toInt(); // convertendo para inteiro (CONTROLE DE MOTORES, APAGAR DEPOIS DE MAPEADO)
+    // Calculando coordenadas
+    char origem[2]  = {recebido[0], recebido[1]}; // isolando origem
+    char destino[2] = {recebido[2], recebido[3]}; // isolando destino
 
-    Serial.println(stepnum);
+    // pegando índices de origem
+    int index_origem[2] = {findIndex_str(x_pos, SIZE, String(origem[0])),
+                           findIndex_int(y_pos, SIZE, String(origem[1]).toInt())};
+    // pegando índices de destino
+    int index_destino[2] = {findIndex_str(x_pos, SIZE, String(destino[0])),
+                           findIndex_int(y_pos, SIZE, String(destino[1]).toInt())};
 
-    if (stepnum > 0) {
-        move_limit_x(stepnum,false);
-    }
-    else if (stepnum < 0) {
-      move_limit_x(module(stepnum),true);
-    }
+   // removendo uma peça, caso ela esteja no destino
+   if(recebido[4] == 's') {
+    // vai até a localização da peça
+    moveX(tracker_x, x_map[index_destino[0]]);
+    moveY(tracker_y, y_map[index_destino[1]]);
+    
+
+
+    pegar();
+  
+    moveZero(); // move até o ponto zero
+    
+    soltar(); // solta a zoio
+  }
+  
+    Serial.println((String)"origem X: "+x_map[index_origem[0]]);
+    Serial.println((String)"origem Y: "+y_map[index_origem[1]]);
+
+    // movendo até a origem e pegando peça
+    Serial.println((String) "RASTREADORES:\n  tracker x: "+tracker_x+"\n  tracker y: "+tracker_y);
+    moveX(tracker_x, x_map[index_origem[0]]);
+    moveY(tracker_y, y_map[index_origem[1]]);
+    soltar(); // abre antes de descer
+    pegar();
+    
+    Serial.println((String)"destino X: "+x_map[index_destino[0]]);
+    Serial.println((String)"destino Y: "+y_map[index_destino[1]]);
+
+    // movendo até o destino e deixando a peça
+    Serial.println((String) "RASTREADORES:\n tracker x: "+tracker_x+"\n tracker y: "+tracker_y);
+    moveX(tracker_x, x_map[index_destino[0]]);
+    moveY(tracker_y, y_map[index_destino[1]]);
+    descer();
+    soltar();
+    subir();
+
+    // voltando ao ponto zero (só de zoas)
+//    moveZero();
+
+    // DEBUG
+
+//    long int stepnum = recebido.toInt(); // convertendo para inteiro (CONTROLE DE MOTORES, APAGAR DEPOIS DE MAPEADO)
+
+//    Serial.println(stepnum);
+
+//    if (stepnum > 0) {
+//        move_limit_x(stepnum,false);
+//    }
+//    else if (stepnum < 0) {
+//      move_limit_x(module(stepnum),true);
+//    }
 
 //    motor_z.step(stepnum);
   }
@@ -116,14 +160,29 @@ void loop() {
 void moveX(long int origem, long int destino) {
   
   long int result =  destino - origem;
+  Serial.println((String) "Resultado X" + result);
   bool negative = (result < 0);
   
   move_limit_x(module(result), negative); 
 }
 
+void moveY(long int origem, long int destino) {
+  
+  long int result =  destino - origem;
+  Serial.println((String) "Resultado Y" + result);
+  bool negative = (result < 0);
+  
+  move_limit_y(module(result), negative); 
+}
+
+void moveZero() {
+  moveX(tracker_x,0);
+  moveY(tracker_y,0);
+}
+
 void pegar() {
   delay(500);
-  garra.write(69);
+  garra.write(APERTURE);
   delay(500);
   motor_z.step(-12600); // desce
   delay(500);
@@ -137,7 +196,7 @@ void descer() {
   delay(500);
   motor_z.step(-12600); // desce
   delay(500);
-  garra.write(69); // fecha a garra
+  garra.write(APERTURE); // fecha a garra
 }
 
 // sobe
@@ -149,7 +208,7 @@ void subir() {
 
 void soltar() {
   delay(500);
-  garra.write(69);
+  garra.write(APERTURE);
 }
 
 // Funções de mapa
@@ -235,7 +294,7 @@ int move_limit_x(long int num, bool negative) {
 }
 
 
-int module(int num) {
+long int module(long int num) {
   if(num > 0) {
     return num;  
   }
